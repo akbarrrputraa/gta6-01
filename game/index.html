@@ -3,17 +3,80 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Block Dodger</title>
+<title>Solmar Bay — Open World</title>
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='6' fill='%23ffd23f'/%3E%3Ctext x='16' y='23' font-size='18' text-anchor='middle' font-family='sans-serif' font-weight='bold' fill='%2306283d'%3ES%3C/text%3E%3C/svg%3E">
 <style>
-  html, body { margin: 0; height: 100%; overflow: hidden; background: #11141b; }
-  #game { position: fixed; inset: 0; width: 100%; height: 100%; display: block; touch-action: none; }
-  /* Read aloud, never shown: the status line screen readers announce. */
-  #status { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
+  html, body { margin: 0; height: 100%; overflow: hidden; background: #0b1c2c; font-family: 'Segoe UI', Arial, sans-serif; }
+  #app { position: fixed; inset: 0; }
+  canvas.webgl { display: block; width: 100%; height: 100%; }
+  .hud { position: absolute; color: #fff; text-shadow: 0 1px 3px rgba(0,0,0,.8); user-select: none; pointer-events: none; z-index: 5; }
+  #stars { top: 12px; right: 16px; font-size: 26px; letter-spacing: 4px; color: #ffd23f; }
+  #stars .off { color: rgba(255,255,255,.25); }
+  #cash { top: 44px; right: 16px; font-size: 22px; font-weight: 700; color: #7dff9a; }
+  #healthbar { top: 76px; right: 16px; width: 180px; height: 12px; background: rgba(0,0,0,.55); border: 1px solid rgba(255,255,255,.5); }
+  #healthfill { height: 100%; width: 100%; background: linear-gradient(90deg,#ff5a5a,#ffb347); }
+  #objective { top: 12px; left: 16px; max-width: 380px; font-size: 15px; line-height: 1.45; }
+  #objective b { color: #ffd23f; font-size: 16px; }
+  #minimap { left: 16px; bottom: 16px; width: 190px; height: 190px; border: 2px solid rgba(255,255,255,.55); border-radius: 50%; overflow: hidden; background: #123; box-shadow: 0 2px 10px rgba(0,0,0,.5); }
+  #minimap canvas { width: 100%; height: 100%; display: block; }
+  #speed { right: 16px; bottom: 16px; font-size: 30px; font-weight: 800; text-align: right; }
+  #speed small { font-size: 13px; font-weight: 400; display: block; }
+  #toast { left: 50%; top: 18%; transform: translateX(-50%); font-size: 22px; font-weight: 700; text-align: center; }
+  #hint { left: 50%; bottom: 14px; transform: translateX(-50%); font-size: 13px; color: rgba(255,255,255,.85); text-align: center; }
+  #crosshair { left: 50%; top: 50%; transform: translate(-50%,-50%); font-size: 22px; color: #fff; display: none; }
+  #ammo { right: 16px; bottom: 76px; font-size: 18px; font-weight: 700; }
+  .screen { position: absolute; inset: 0; z-index: 10; display: flex; flex-direction: column; align-items: center; justify-content: center; text-align: center; color: #fff; background: linear-gradient(180deg, rgba(6,30,48,.82), rgba(6,30,48,.55) 55%, rgba(6,30,48,.88)); }
+  .screen h1 { margin: 0; font-size: 64px; letter-spacing: 6px; color: #ffd23f; text-shadow: 0 4px 0 #b3541e, 0 8px 24px rgba(0,0,0,.6); }
+  .screen h2 { margin: 6px 0 18px; font-size: 20px; font-weight: 400; letter-spacing: 3px; color: #aee7ff; }
+  .screen p { max-width: 560px; line-height: 1.6; font-size: 15px; color: #eaf6ff; }
+  .screen .keys { font-size: 13px; color: #cfe8ff; background: rgba(0,0,0,.35); padding: 10px 16px; border-radius: 8px; }
+  .bigbtn { pointer-events: auto; cursor: pointer; margin-top: 22px; font-size: 20px; font-weight: 800; letter-spacing: 2px; color: #06283d; background: #ffd23f; border: none; border-radius: 10px; padding: 14px 42px; box-shadow: 0 4px 0 #b3541e; }
+  .bigbtn:hover { background: #ffe27a; }
+  #loading { position: absolute; inset: 0; z-index: 20; display: flex; align-items: center; justify-content: center; color: #fff; background: #0b1c2c; font-size: 18px; }
 </style>
 </head>
 <body>
-<canvas id="game" aria-label="Block Dodger: move the paddle left and right to dodge falling blocks and catch coins"></canvas>
-<p id="status" role="status" aria-live="polite"></p>
+<div id="app"></div>
+<div id="loading">Loading Solmar Bay…</div>
+<div id="stars" class="hud"></div>
+<div id="cash" class="hud">$0</div>
+<div id="healthbar" class="hud"><div id="healthfill"></div></div>
+<div id="objective" class="hud"></div>
+<div id="minimap" class="hud"><canvas id="mapcanvas" width="190" height="190"></canvas></div>
+<div id="speed" class="hud"></div>
+<div id="ammo" class="hud"></div>
+<div id="toast" class="hud"></div>
+<div id="hint" class="hud">WASD move &nbsp;·&nbsp; Mouse drag camera &nbsp;·&nbsp; E enter / exit car &nbsp;·&nbsp; Click shoot &nbsp;·&nbsp; F punch &nbsp;·&nbsp; Shift run &nbsp;·&nbsp; P pause &nbsp;·&nbsp; M music</div>
+<div id="crosshair" class="hud">✛</div>
+
+<div id="titlescreen" class="screen">
+  <h1>SOLMAR BAY</h1>
+  <h2>AN OPEN-WORLD CRIME STORY</h2>
+  <p>You are <b>Rico Vega</b>, a wheelman fresh out of the Marina docks. The Bay City crew
+  runs this town — and the harbour boss <b>Donna Marisol</b> wants you to prove yourself.
+  Steal cars, outrun the Bay Police, and climb the crew's ladder, one job at a time.</p>
+  <p class="keys">WASD — move / drive &nbsp;·&nbsp; Mouse drag — camera &nbsp;·&nbsp; E — enter / exit car &nbsp;·&nbsp; Left click — shoot &nbsp;·&nbsp; F — punch &nbsp;·&nbsp; Shift — sprint &nbsp;·&nbsp; Space — brake / jump &nbsp;·&nbsp; P — pause</p>
+  <button id="playbtn" class="bigbtn">▶ &nbsp;START THE STORY</button>
+  <p id="continuetxt" style="font-size:13px;color:#ffd23f"></p>
+</div>
+
+<div id="pausescreen" class="screen" style="display:none">
+  <h1 style="font-size:44px">PAUSED</h1>
+  <p>Solmar Bay waits for no one — except right now.</p>
+  <button id="resumebtn" class="bigbtn">RESUME</button>
+  <button id="savebtn" class="bigbtn" style="background:#aee7ff;box-shadow:0 4px 0 #2b6a8f">SAVE GAME</button>
+  <button id="quitbtn" class="bigbtn" style="background:#ff9a8a;box-shadow:0 4px 0 #8f2b2b">QUIT TO TITLE</button>
+</div>
+
+<div id="overscreen" class="screen" style="display:none">
+  <h1 style="font-size:44px;color:#ff6b6b">BUSTED / WASTED</h1>
+  <p id="overtext">The Bay Police took you in.</p>
+  <button id="retrybtn" class="bigbtn">TRY AGAIN</button>
+</div>
+
+<script type="importmap">
+{ "imports": { "three": "./vendor/three.module.min.js" } }
+</script>
 <script type="module" src="./src/main.js"></script>
 </body>
 </html>
